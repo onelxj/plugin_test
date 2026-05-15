@@ -25,19 +25,28 @@ fi
 
 # Register the Reboot skills marketplace with Claude Code.
 log "Adding Reboot skills marketplace..."
-claude plugin marketplace add reboot-dev/reboot-plugin
+claude plugin marketplace add onelxj/plugin_test
 
 # Install the plugin from the registered marketplace.
 log "Installing reboot plugin..."
 claude plugin install reboot@reboot-plugin
 
-# Pre-warm all pinned dependencies by starting a Claude Code session.
-# The SessionStart hook fires, adding the plugin's bin/ shims to PATH,
-# then Claude invokes them via its bash tool, which triggers
-# install_uv.sh, install_node.sh, and install_envoy.sh.
+# Pre-warm the pinned dependencies by invoking each bin/ shim with
+# `--version`. Claude Code clones the marketplace to a predictable
+# path; each shim triggers its install script, which caches the
+# binary under `~/.claude/plugins/data/reboot/`. Running `rbt` also
+# makes `uvx` fetch the pinned Reboot CLI and its Python deps.
+# Non-fatal: any failure here just defers the download to first use.
+PLUGIN_DIR="$HOME/.claude/plugins/marketplaces/reboot-plugin"
 log "Pre-installing dependencies..."
-claude -p "Run rbt --version, uv --version, uvx --version, node --version, npm --version, and envoy --version" \
-    >/dev/null
+if [ -d "$PLUGIN_DIR/bin" ]; then
+    for tool in uv uvx node npm envoy rbt; do
+        sh "$PLUGIN_DIR/bin/$tool" --version >/dev/null 2>&1 \
+            || log "Could not pre-install $tool; it loads on first use."
+    done
+else
+    log "Plugin directory not found; dependencies install on first use."
+fi
 
 ok "Installation complete!"
 printf >&2 "\nStart a new Claude Code session, then type ${BOLD}/chat-app${RESET}"
